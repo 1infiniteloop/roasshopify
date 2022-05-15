@@ -331,8 +331,6 @@ const Shopify = {
             let { start: start_timestamp, end: end_timestamp } = Shopify.utilities.date_start_end_timestamps(date);
 
             let shopify_db_docs = async (startAt = false) => {
-                let docs = [];
-
                 let pagination_loop = async (startAt, iteration = 0) => {
                     if (startAt == false) {
                         console.log("here");
@@ -350,7 +348,12 @@ const Shopify = {
                         let snapshot_size = snapshot.size;
                         console.log("snapshot_size", snapshot_size);
                         const lastVisible = snapshot.docs[snapshot.docs.length - 1];
-                        return snapshot.docs.map((doc) => doc.data()).concat(await pagination_loop(lastVisible));
+
+                        if (lastVisible) {
+                            return snapshot.docs.map((doc) => doc.data()).concat(await pagination_loop(lastVisible));
+                        } else {
+                            return snapshot.docs.map((doc) => doc.data());
+                        }
                     } else {
                         let db_query = query(
                             collection(db, "shopify"),
@@ -367,7 +370,9 @@ const Shopify = {
                         let snapshot_size = snapshot.size;
                         console.log("snapshot_size", snapshot_size);
                         const lastVisible = snapshot.docs[snapshot.docs.length - 1];
+
                         if (snapshot_size == 1000) {
+                            console.log("heressss", snapshot_size);
                             return snapshot.docs.map((doc) => doc.data()).concat(await pagination_loop(lastVisible));
                         } else {
                             return snapshot.docs.map((doc) => doc.data());
@@ -379,7 +384,7 @@ const Shopify = {
                 return shopify_docs;
             };
 
-            return from(shopify_db_docs())
+            return from(shopify_db_docs(false))
                 .pipe(rxmap(pipeLog))
                 .pipe(
                     rxmap(lofilter((order) => order.browser_ip)),
@@ -597,8 +602,8 @@ const Shopify = {
 
 exports.Shopify = Shopify;
 
-// let user_id = "IG4iFdTPjeT8VdMVCu5a7BboHek1";
-// let date = "2022-04-20";
+// let user_id = "8ylX4CT3GMOudHilh6U3P3PhNw93";
+// let date = "2022-05-12";
 
 // from(getDocs(query(collectionGroup(db, "project_accounts"), where("roas_user_id", "==", user_id))))
 //     .pipe(
@@ -627,3 +632,11 @@ exports.Shopify = Shopify;
 //             pipeLog(result);
 //         });
 //     });
+
+// from(getDocs(query(collection(db, "events"), where("roas_user_id", "==", roas_user_id), limit(1))))
+//     .pipe(rxmap(Shopify.utilities.queryDocs))
+//     .subscribe(pipeLog);
+
+// from(getDocs(query(collection(db, "shopify"), where("roas_user_id", "==", roas_user_id), limit(1))))
+//     .pipe(rxmap(Shopify.utilities.queryDocs))
+//     .subscribe(pipeLog);
