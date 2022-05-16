@@ -48,6 +48,7 @@ const Facebook = {
                         return Facebook.ad.db.get(ad_args).pipe(
                             concatMap((ad) => iif(() => !isEmpty(ad), rxof(ad), Facebook.ad.api.get(ad_args))),
                             rxmap((ad) => ({ ...ad, timestamp })),
+                            // rxmap(pipeLog),
                             rxfilter(pipe(isEmpty, not))
                         );
                     }),
@@ -384,48 +385,50 @@ const Shopify = {
                 return shopify_docs;
             };
 
-            return from(shopify_db_docs(false))
-                .pipe(rxmap(pipeLog))
-                .pipe(
-                    rxmap(lofilter((order) => order.browser_ip)),
-                    rxmap(lofilter((order) => order.id > 0)),
-                    // rxmap(lofilter((order) => order.order_number > 0))
-                    rxmap(
-                        mod(all)(
-                            pick([
-                                "order_number",
-                                "id",
-                                "refunds",
-                                "email",
-                                "current_total_price",
-                                "created_at_unix_timestamp",
-                                "total_tax",
-                                "total_price_usd",
-                                "browser_ip",
-                                "customer_locale",
-                                "subtotal_price",
-                                "customer",
-                                "line_items",
-                                "total_line_items_price",
-                            ])
-                        )
-                    ),
-                    rxmap(mod(all, "customer")(pick(["first_name", "last_name"]))),
-                    rxmap(mod(all, "line_items", all)(pick(["title", "price", "quantity", "name"]))),
-                    rxmap(
-                        mod(all)((order) => ({
-                            ...order,
-                            roas_user_id: user_id,
-                            lower_case_email: toLower(order.email),
-                            ip_address: order.browser_ip,
-                        }))
-                    ),
-                    rxmap(louniqby("id")),
-                    rxmap(logroupby("lower_case_email")),
-                    rxmap(values),
-                    rxmap(flatten),
-                    defaultIfEmpty([])
-                );
+            return (
+                from(shopify_db_docs(false))
+                    // .pipe(rxmap(pipeLog))
+                    .pipe(
+                        rxmap(lofilter((order) => order.browser_ip)),
+                        rxmap(lofilter((order) => order.id > 0)),
+                        // rxmap(lofilter((order) => order.order_number > 0))
+                        rxmap(
+                            mod(all)(
+                                pick([
+                                    "order_number",
+                                    "id",
+                                    "refunds",
+                                    "email",
+                                    "current_total_price",
+                                    "created_at_unix_timestamp",
+                                    "total_tax",
+                                    "total_price_usd",
+                                    "browser_ip",
+                                    "customer_locale",
+                                    "subtotal_price",
+                                    "customer",
+                                    "line_items",
+                                    "total_line_items_price",
+                                ])
+                            )
+                        ),
+                        rxmap(mod(all, "customer")(pick(["first_name", "last_name"]))),
+                        rxmap(mod(all, "line_items", all)(pick(["title", "price", "quantity", "name"]))),
+                        rxmap(
+                            mod(all)((order) => ({
+                                ...order,
+                                roas_user_id: user_id,
+                                lower_case_email: toLower(order.email),
+                                ip_address: order.browser_ip,
+                            }))
+                        ),
+                        rxmap(louniqby("id")),
+                        rxmap(logroupby("lower_case_email")),
+                        rxmap(values),
+                        rxmap(flatten),
+                        defaultIfEmpty([])
+                    )
+            );
         },
 
         without_refunds: (orders) => {
@@ -539,14 +542,24 @@ const Shopify = {
                             timestamp: pipe(Event.get_utc_timestamp)(event),
                             ip: ip_address,
                         })),
+                        // rxmap((value) => {
+                        //     if (value.ad_id == "23851191051900587") {
+                        //         console.log("timestampisundefined");
+                        //         console.log(value);
+                        //     }
+                        //     return value;
+                        // }),
+                        // rxmap(pipeLog),
                         rxmap(of),
                         Shopify.utilities.rxreducer,
                         rxmap(loorderby(["timesamp"], ["desc"])),
                         rxmap(get(matching({ ad_id: (id) => !isEmpty(id) }))),
                         rxmap(louniqby("ad_id")),
+                        // rxmap(pipeLog),
                         rxmap(louniqby("timestamp")),
                         rxmap((ads) => ({ ...customer, ads })),
                         rxmap(of)
+                        // rxmap(pipeLog)
                     );
                 }),
                 Shopify.utilities.rxreducer
@@ -561,8 +574,13 @@ const Shopify = {
                     let { ads, email } = order;
                     let ad_ids = pipe(mod(all)(pick(["ad_id"])))(ads);
 
+                    if (map(get("timestamp"), ads).includes(undefined)) {
+                        console.log("includesundefiened");
+                    }
+
                     let ad_details = Facebook.ads.details.get({ ad_ids, fb_ad_account_id, user_id, date }).pipe(
                         rxfilter((ad) => !isUndefined(ad.asset_id)),
+                        // rxmap(pipeLog),
                         rxmap((ad) => ({
                             ...ad,
                             email,
@@ -571,6 +589,10 @@ const Shopify = {
                             // user_agent: pipe(get(matching({ ad_id: ad.ad_id }), "user_agent"), head)(ads),
                             timestamp: pipe(get(matching({ ad_id: ad.ad_id }), "timestamp"), head)(ads),
                         })),
+                        rxmap((value) =>
+                            value.timestamp == undefined ? { ...value, timestamp: Number(moment(date).startOf().format("x")) } : value
+                        ),
+                        // rxmap(pipeLog),
                         rxmap(of),
                         rxreduce((prev, curr) => [...prev, ...curr]),
                         defaultIfEmpty([])
@@ -602,8 +624,8 @@ const Shopify = {
 
 exports.Shopify = Shopify;
 
-// let user_id = "8ylX4CT3GMOudHilh6U3P3PhNw93";
-// let date = "2022-05-12";
+// let user_id = "IG4iFdTPjeT8VdMVCu5a7BboHek1"; // + shopify
+// let date = "2022-05-15";
 
 // from(getDocs(query(collectionGroup(db, "project_accounts"), where("roas_user_id", "==", user_id))))
 //     .pipe(
