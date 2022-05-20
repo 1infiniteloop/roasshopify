@@ -1,7 +1,27 @@
 const moment = require("moment-timezone");
-const { pick, map, pipe, values, head, identity, of, keys, curry, sum, flatten, not, toLower, paths, reject, mergeAll, uniq } = require("ramda");
+const {
+    pick,
+    map,
+    pipe,
+    values,
+    head,
+    identity,
+    of,
+    keys,
+    curry,
+    sum,
+    flatten,
+    not,
+    toLower,
+    paths,
+    reject,
+    mergeAll,
+    uniq,
+    hasPath,
+    anyPass,
+} = require("ramda");
 const { size, isUndefined, isEmpty, toNumber, orderBy: lodashorderby, compact } = require("lodash");
-const { from, zip, of: rxof, catchError, throwError, iif } = require("rxjs");
+const { from, zip, of: rxof, catchError, throwError, iif, tap } = require("rxjs");
 const { concatMap, map: rxmap, filter: rxfilter, reduce: rxreduce, defaultIfEmpty } = require("rxjs/operators");
 const { query, where, getDocs, collection, collectionGroup, limit, orderBy, startAfter } = require("firebase/firestore");
 const { db } = require("./database");
@@ -182,9 +202,13 @@ const Facebook = {
 
 const Event = {
     ad: {
-        id: ({ fb_ad_id, h_ad_id, ad_id } = {}) => {
+        id: ({ fb_ad_id, h_ad_id, ad_id, fb_id } = {}) => {
             let func_name = `Event:ad:id`;
             console.log(func_name);
+
+            if (fb_id) {
+                console.log("fb_id:", fb_id);
+            }
 
             if (ad_id) {
                 return ad_id;
@@ -217,24 +241,24 @@ const Event = {
 
         if (get("created_at_unix_timestamp")(value)) {
             timestamp = get("created_at_unix_timestamp")(value);
-            console.log(timestamp);
+            // console.log(timestamp);
             return timestamp;
         }
 
         if (get("utc_unix_time")(value)) {
             let timestamp = get("utc_unix_time")(value);
-            console.log(timestamp);
+            // console.log(timestamp);
             return timestamp;
         }
 
         if (get("utc_iso_datetime")(value)) {
             let timestamp = pipe(get("utc_unix_time"), (value) => moment(value).unix())(value);
-            console.log(timestamp);
+            // console.log(timestamp);
             return timestamp;
         }
 
         timestamp = get("unix_datetime")(value);
-        console.log(timestamp);
+        // console.log(timestamp);
 
         if (!timestamp) {
             console.log("notimestamp");
@@ -319,6 +343,8 @@ const Shopify = {
         rxreducer: rxreduce((prev, curr) => [...prev, ...curr]),
 
         queryDocs: (snapshot) => snapshot.docs.map((doc) => doc.data()),
+
+        has_ad_id: anyPass([hasPath(["fb_ad_id"]), hasPath(["h_ad_id"]), hasPath(["fb_id"]), hasPath(["ad_id"])]),
     },
 
     orders: {
@@ -530,25 +556,21 @@ const Shopify = {
 
                     return zip([from(ipEvents("ipv4", ip_address, roas_user_id)), from(ipEvents("ipv6", ip_address, roas_user_id))]).pipe(
                         rxmap(flatten),
+                        tap((value) => console.log("size ->", size(value))),
+                        rxmap(pipe(lofilter(Shopify.utilities.has_ad_id))),
+                        tap((value) => console.log("size <- ", size(value))),
                         concatMap(identity),
                         rxmap((event) => ({
                             ad_id: pipe(
                                 paths([["fb_ad_id"], ["h_ad_id"], ["fb_id"], ["ad_id"]]),
                                 compact,
                                 uniq,
-                                reject((id) => id == "%7B%7Bad.id%7D%7D"),
+                                reject((id) => id == "%7B%7Bad.id%7D%7D" || id == "{{ad.id}}"),
                                 head
                             )(event),
                             timestamp: pipe(Event.get_utc_timestamp)(event),
                             ip: ip_address,
                         })),
-                        // rxmap((value) => {
-                        //     if (value.ad_id == "23851191051900587") {
-                        //         console.log("timestampisundefined");
-                        //         console.log(value);
-                        //     }
-                        //     return value;
-                        // }),
                         // rxmap(pipeLog),
                         rxmap(of),
                         Shopify.utilities.rxreducer,
@@ -627,7 +649,7 @@ exports.Shopify = Shopify;
 // let user_id = "IG4iFdTPjeT8VdMVCu5a7BboHek1"; // + shopify
 // let date = "2022-05-15";
 
-// from(getDocs(query(collectionGroup(db, "project_accounts"), where("roas_user_id", "==", user_id))))
+// from(getDocs(query(collection(db, "projects"), where("roas_user_id", "==", user_id))))
 //     .pipe(
 //         rxmap(Shopify.utilities.queryDocs),
 //         rxmap(lofilter((project) => project.shopping_cart_name !== undefined)),
