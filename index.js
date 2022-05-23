@@ -400,9 +400,16 @@ const Shopify = {
 
                         if (snapshot_size == 1000) {
                             console.log("heressss", snapshot_size);
-                            return snapshot.docs.map((doc) => doc.data()).concat(await pagination_loop(lastVisible));
+                            return snapshot.docs
+                                .map((doc) => doc.data())
+                                .filter((order) => order.browser_ip)
+                                .filter((order) => order.id > 0)
+                                .concat(await pagination_loop(lastVisible));
                         } else {
-                            return snapshot.docs.map((doc) => doc.data());
+                            return snapshot.docs
+                                .map((doc) => doc.data())
+                                .filter((order) => order.browser_ip)
+                                .filter((order) => order.id > 0);
                         }
                     }
                 };
