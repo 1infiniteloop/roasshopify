@@ -342,7 +342,7 @@ const Shopify = {
 
         rxreducer: rxreduce((prev, curr) => [...prev, ...curr]),
 
-        queryDocs: (snapshot) => snapshot.docs.map((doc) => doc.data()),
+        queryDocs: (snapshot) => snapshot.docs.map((doc) => ({ ...doc.data(), doc_id: doc.id })),
 
         has_ad_id: anyPass([hasPath(["fb_ad_id"]), hasPath(["h_ad_id"]), hasPath(["fb_id"]), hasPath(["ad_id"])]),
     },
@@ -355,7 +355,9 @@ const Shopify = {
             if (!user_id) return throwError(`error:${func_name}:no user_id`);
             if (!date) return throwError(`error:${func_name}:no date`);
 
-            let { start: start_timestamp, end: end_timestamp } = Shopify.utilities.date_start_end_timestamps(date);
+            console.log("shopify_date", date);
+
+            let { start: start_timestamp, end: end_timestamp } = Shopify.utilities.date_start_end_timestamps(date, date);
 
             let shopify_db_docs = async (startAt = false) => {
                 let pagination_loop = async (startAt, iteration = 0) => {
@@ -400,21 +402,18 @@ const Shopify = {
 
                         if (snapshot_size == 1000) {
                             console.log("heressss", snapshot_size);
-                            return snapshot.docs
-                                .map((doc) => doc.data())
-                                .filter((order) => order.browser_ip)
-                                .filter((order) => order.id > 0)
-                                .concat(await pagination_loop(lastVisible));
+                            return snapshot.docs.map((doc) => doc.data()).concat(await pagination_loop(lastVisible));
                         } else {
-                            return snapshot.docs
-                                .map((doc) => doc.data())
-                                .filter((order) => order.browser_ip)
-                                .filter((order) => order.id > 0);
+                            return snapshot.docs.map((doc) => doc.data());
                         }
                     }
                 };
 
                 let shopify_docs = await pagination_loop(startAt);
+
+                console.log("customer_timestamps");
+                pipe(get(all, "created_at_unix_timestamp"), pipeLog)(shopify_docs);
+
                 return shopify_docs;
             };
 
@@ -551,6 +550,7 @@ const Shopify = {
                 })),
                 rxmap(of),
                 Shopify.utilities.rxreducer,
+                // rxmap(pipeLog),
                 rxmap(values)
             );
 
@@ -592,6 +592,7 @@ const Shopify = {
                     );
                 }),
                 Shopify.utilities.rxreducer
+                // rxmap(pipeLog)
             );
 
             // return customers_from_db_events;
@@ -653,8 +654,8 @@ const Shopify = {
 
 exports.Shopify = Shopify;
 
-// let user_id = "IG4iFdTPjeT8VdMVCu5a7BboHek1"; // + shopify
-// let date = "2022-05-15";
+// let user_id = "o39C6KYyHVdNthWc9AYZx9Fpqlb2"; // + shopify
+// let date = "2022-05-20";
 
 // from(getDocs(query(collection(db, "projects"), where("roas_user_id", "==", user_id))))
 //     .pipe(
